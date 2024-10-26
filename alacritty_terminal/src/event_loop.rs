@@ -204,7 +204,21 @@ where
         Ok(())
     }
 
-    pub fn spawn(mut self) -> JoinHandle<(Self, State)> {
+    // backward compatible interface
+    #[inline]
+    pub fn spawn(self) -> JoinHandle<(Self, State)> {
+        let pipe = if self.ref_test {
+            Some(File::create("./alacritty.recording").expect("create alacritty recording"))
+        } else {
+            None
+        };
+        self.spawn_with_pipe(pipe)
+    }
+
+    pub fn spawn_with_pipe<X>(mut self, mut pipe: Option<X>) -> JoinHandle<(Self, State)>
+    where
+        X: Write + Send + 'static,
+    {
         thread::spawn_named("PTY reader", move || {
             let mut state = State::default();
             let mut buf = [0u8; READ_BUFFER_SIZE];
@@ -219,12 +233,6 @@ where
             }
 
             let mut events = Events::with_capacity(NonZeroUsize::new(1024).unwrap());
-
-            let mut pipe = if self.ref_test {
-                Some(File::create("./alacritty.recording").expect("create alacritty recording"))
-            } else {
-                None
-            };
 
             'event_loop: loop {
                 // Wakeup the event loop when a synchronized update timeout was reached.
